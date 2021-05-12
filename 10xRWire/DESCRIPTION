@@ -1,0 +1,35 @@
+Package: ArchRWire
+Title: What the Package Does (One Line, Title Case)
+Version: 0.1.03
+Authors@R: 
+    person(given = "Isabelle",
+           family = "Lander",
+           role = c("aut", "cre"),
+           email = "i.lander@dkfz-heidelberg.de",
+           comment = c(ORCID = "YOUR-ORCID-ID"))
+Description: What the package does (one paragraph).
+License: `use_mit_license()`, `use_gpl3_license()` or friends to
+    pick a license
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.1.1.9000
+Collate: 
+    'addGeneIntegrationMatrix.R'
+    'ArchR_ArrowUtils.R'
+    'ArchR_ArrowWrite.R'
+    'ArchR_HelperUtils.R'
+    'ArchR_GroupExport.R'
+    'ArchR_HiddenUtils.R'
+    'ArchR_LoggerUtils.R'
+    'ArchR_ValidationUtils.R'
+    'ArchRBrowser.R'
+    'getBackgroundCoAccessibility.R'
+    'getCellAggregateMatrix.R'
+    'getCoAccessibility.R'
+    'plotCellQuality.R'
+    'plotCoAccessibilityMap.R'
+    'plotUmapClusters.R'
+    'plotUmapSplit.R'
+    'plotUmapQC.R'
+    'plotUmaps.R'
