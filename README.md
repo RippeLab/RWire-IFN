@@ -1,2 +1,2 @@
 # scATAC
-Scripts for co-regulation analysis of scATAC-seq data
+Scripts for co-accessibility analysis of scATAC-seq data
