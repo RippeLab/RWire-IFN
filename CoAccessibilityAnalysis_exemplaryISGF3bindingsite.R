@@ -12,7 +12,7 @@ library(Repitools)
 library(BSgenome.Mmusculus.UCSC.mm10)
 library(GenomicRanges)
 
-devtools::install_github("RippeLab/scATAC/RWire10x")
+devtools::install_github("RippeLab/RWire-IFN/RWire10x")
 library(RWire10x)
 
 ### For installation:
