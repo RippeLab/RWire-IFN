@@ -1,6 +1,6 @@
 ### R4.0.2
 ### Exemplary script for co-accessibility analysis of IFNb-treated mouse cells
-### Isabelle Lander
+### Isabelle Seufert
 ### Department of Chromatin Networks, DKFZ
 ### 27.05.2020
 
@@ -33,7 +33,12 @@ addArchRThreads(threads = 19)
 addArchRGenome("mm10")
 
 ### Data available from GEO (GSE160764)
-proj <- loadArchRProject("../01_ArchR_basics/ESC_IFNb")
+proj <- loadArchRProject("../ArchRProject")
+
+### Default ArchR workflow (see Methods section)
+# Creation of Arrow files and ArchR projects, doublet detection
+# Cell filtering criteria ESCs: log10(nFrags) >= 3.5; log10(nFrags) < 5; TSS ratio > 4; Blacklist ratio <= 0.0225
+# Cell filtering criteria MEFs: log10(nFrags) >= 3.5; log10(nFrags) < 5; TSS ratio > 4; Blacklist ratio <= 0.0165; Doublet filtering ratio = 1.35
 
 ### Exemplary ISGF3 binding site
 bs <- GRanges(seqnames="chr1", IRanges(start=35274688, end=35275064))
