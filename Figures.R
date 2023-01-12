@@ -32,7 +32,8 @@ addArchRThreads(threads = 19)
 addArchRGenome("mm10")
 
 ### Data available from GEO (GSE160764)
-proj <- loadArchRProject("../01_ArchR_basics/ESC_IFNb")
+proj_ESC <- loadArchRProject("ArchRProject_ESC")
+proj_MEF <- loadArchRProject("ArchRProject_MEF")
 
 ### Default ArchR workflow (see Methods section)
 # Creation of Arrow files and ArchR projects, doublet detection
