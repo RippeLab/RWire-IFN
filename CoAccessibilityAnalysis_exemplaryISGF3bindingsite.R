@@ -50,6 +50,7 @@ peaks <- getPeakSet(proj)
 
 ### Add 2 kb regions around STAT1/2 bound sites (Table_S4) and TSSs of ISGs (Table_S5) to peak set
 peaks <- c(peaks, gUtils::gr.mid(STAT_sites)+1000, gUtils::gr.mid(ISG_TSSs)+1000)
+peaks$id <- gUtils::gr.mid(peaks) %>% as.character(.) %>% gsub(":.$", "", .) 
 
 ### Annotate peaks overlapping with STAT1/2 bound sites
 peaks$STAT <- FALSE
@@ -107,9 +108,15 @@ background_cutoff <- lapply(background_list, function(x){max(quantile(x$featShuf
 ### Filter links with correlation coefficient above background cutoff, p-value below 0.01, and overlap with STAT1/2 bound site
 coacc_list_filtered <- lapply(samples, function(sample){coacc_filtered <- coacc_list[[sample]][ coacc_list[[sample]]$correlation > background_cutoff ];
                                                         coacc_filtered <- coacc_filtered[ coacc_filtered$Pval < 0.01 ];
-                                                        coacc_filtered <- coacc_filtered[ coacc_filtered$STAT ];
+                                                        coacc_filtered$id1 <- paste(as.character(seqnames(coacc_filtered)), start(coacc_filtered), sep=":");
+                                                        coacc_filtered$id2 <- paste(as.character(seqnames(coacc_filtered)), end(coacc_filtered), sep=":");
+                                                        coacc_filtered$STAT1 <- peaks$STAT[match(coacc_filtered$id1, peaks$id)];
+                                                        coacc_filtered$STAT2 <- peaks$STAT[match(coacc_filtered$id2, peaks$id)];
+                                                        coacc_filtered <- coacc_filtered[ coacc_filtered$STAT1 | coacc_filtered$STAT2 ];
                                                         return(coacc_filtered) })
 
+
+########## Visualization ##########
 ### Visualize co-accessibility scores around exemplary STAT1/2 bound site
 bs <- GRanges(seqnames="chr1", IRanges(start=35274688, end=35275064))
 plotBrowserTrack(proj, groupBy = "Sample", region = gr.mid(bs)+500000, loops = coacc_list_filtered, normMethod = "nFrags")
