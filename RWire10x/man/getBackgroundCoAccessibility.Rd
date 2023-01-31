@@ -11,6 +11,7 @@ getBackgroundCoAccessibility(
   scaleDims = NULL,
   corCutOff = 0.75,
   cellsToUse = NULL,
+  cellAggregation = "duplicated",
   k = 100,
   knnIteration = 500,
   overlapCutoff = 0.8,
