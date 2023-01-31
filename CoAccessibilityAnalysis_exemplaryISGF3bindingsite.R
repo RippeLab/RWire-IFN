@@ -40,64 +40,79 @@ proj <- loadArchRProject("ArchRProject")
 # Cell filtering criteria ESCs: log10(nFrags) >= 3.5; log10(nFrags) < 5; TSS ratio > 4; Blacklist ratio <= 0.0225
 # Cell filtering criteria MEFs: log10(nFrags) >= 3.5; log10(nFrags) < 5; TSS ratio > 4; Blacklist ratio <= 0.0165; Doublet filtering ratio = 1.35
 
-### Exemplary ISGF3 binding site
-bs <- GRanges(seqnames="chr1", IRanges(start=35274688, end=35275064))
 
-### Generate peak base set over all chromosomes (otherwise bug in ArchR addCoAccessibility function for chr16 only analyses)
-peaks_base <- GRanges(
-        seqnames=Rle(paste0("chr", c(1:19, "X")), 1),
-        ranges=IRanges(start=rep(10000, 20), end=rep(11000, 20)))
+########## Create peak set ##########
+### Call peaks
+proj <- addGroupCoverages(proj, groupBy = "Sample")
+proj <- addReproduciblePeakSet(proj, groupBy = "Sample", pathToMacs2 = "/path/to/macs2", 
+                               extendSummits = 1000, reproducibility = "1")
+peaks <- getPeakSet(proj)
 
-### Get chromosome information for mm10
-chrInfo <- getChromInfoFromUCSC("mm10")
+### Add 2 kb regions around STAT1/2 bound sites (Table_S4) and TSSs of ISGs (Table_S5) to peak set
+peaks <- c(peaks, gUtils::gr.mid(STAT_sites)+1000, gUtils::gr.mid(ISG_TSSs)+1000)
 
-### Conditions
-conditions <- c("ESC_IFNb0h", "ESC_IFNb6h")
-
-
-########## Co-accessibility analysis for one exemplary binding site ##########
-### Generate tile set (tile size 2 kb) for a 1 Mb window around the binding site
-if (start(gr.mid(bs)) > chrInfo$size[chrInfo$chrom==seqnames(bs)@values]-500000){
-    tiles <- tile(GRanges(seqnames=seqnames(bs), IRanges(start(gr.mid(bs))-499000, end=start(gr.mid(bs))+1000+floor((chrInfo$size[chrInfo$chrom==seqnames(bs)@values]-start(gr.mid(bs))-1000) / 2000)*2000)), n=floor((chrInfo$size[chrInfo$chrom==seqnames(bs)@values]-start(gr.mid(bs))-1000+500000) / 2000))[[1]]
-} else if (start(gr.mid(bs)) < 500000) {
-    stop("Code border region at chr start.")
-} else {
-    tiles <- tile(gr.mid(bs)+499000, n=499)[[1]]
-}
-
-### Add GC content for tiles
-tiles$GC <- Repitools::gcContentCalc(tiles, organism=Mmusculus)
+### Annotate peaks overlapping with STAT1/2 bound sites
+peaks$STAT <- FALSE
+peaks$STAT[IRanges::findOverlaps(peaks, STAT_sites) %>% IRanges::queryHits(.)] <- TRUE
 
 ### Add peak set
-proj <- addPeakSet(proj, peakSet = c(peaks_base, tiles), force = TRUE)
+proj <- addPeakSet(proj, peakSet = peaks, force = TRUE)
+proj <- addPeakMatrix(proj)
 
-### Generate separate projects for conditions
-proj_list <- sapply(conditions, function(x){proj_x <- saveArchRProject(ArchRProj = proj, outputDirectory = paste0("01_ArchRProjs/", x), load = TRUE); subsetCells(ArchRProj = proj_x, cellNames = proj$cellNames[which(proj$Sample_cluster==x)])})
 
-### Add peak/tile set matrix
-proj_list <- lapply(proj_list, addPeakMatrix)
+########## Define analysis conditions and compensate biases in nCells and nFrags ##########
+### Conduct analysis for individual cell types and conditions, seperately
+samples <- c("ESC_IFNb0h", "ESC_IFNb6h", 
+                "MEF_IFNb0h_mesenchymal", "MEF_IFNb1h_mesenchymal", "MEF_IFNb6h_mesenchymal",
+                "MEF_IFNb0h_epithelial", "MEF_IFNb1h_epithelial", "MEF_IFNb6h_epithelial")
 
-### Add co-accessibility
-proj_list <- lapply(proj_list, function(x){addCoAccessibility(x, reducedDims = "IterativeLSI", maxDist = 1e+06)})
+### Define reference sample and nCells
+n <- 2700
+ref <- "MEF_IFNb0h_epithelial"
 
-### Get co-accessibility scores and accessible cell ratio (ACR) for all tiles
-coacc_list <- lapply(proj_list, function(x){RWire10x::getCoAccessibility(x, corCutOff = 0, resolution = 1, returnLoops = TRUE)[[1]]})
+### Define cells to keep
+keepCells <- sample(proj$cellNames[proj$Sample == ref], n)
+ref_nFrags <- proj$nFrags[proj$cellNames == keepCells[[ref]]]
+keepCells <- lapply(samples[-ref], function(sample){query_nFrags <- proj$nFrags[proj$Sample == sample];
+                                                    names(query_nFrags) <- proj$cellNames[proj$Sample == sample];
+                                                    keep <- names(query_nFrags)[ Closest(x=query_nFrags, ref_nFrags[1], which = TRUE)[1] ];
+                                                    for (a in ref_nFrags[-1]){
+                                                            lookup <- query_nFrags[-keep]; names(lookup) <- names(query_nFrags)[-keep];
+                                                            keep <- c(keep, names(lookup)[ Closest(x=lookup, a, which = TRUE)[1] ]);
+                                                    }
+                                                    return(keep) }) %>% unlist(.) %>% c(keepCells, .)
 
-### Get background co-accessibility by randomly shuffling accessibility in cells and tiles
-background_list <- lapply(proj_list, function(x){RWire10x::getBackgroundCoAccessibility(x, reducedDims = "IterativeLSI_filtered_25000varFeatures", maxDist=1e+06)})
+### Filter cells
+proj <- subsetCells(ArchRProj = proj, cellNames = keepCells)
 
-### Determine 99th percentile maximum of cell- and feature-shuffled background co-accessibility as threshold
-background_cutoff <- max(quantile(background_list$featShuffle$correlation, seq(0.01,1,by=0.01), na.rm=T)[99],
-                         quantile(background_list$cellShuffle$correlation, seq(0.01,1,by=0.01), na.rm=T)[99])
 
-### Filter out links with background co-accessibility above background cutoff and accessible cell ratios of genomic tiles below 0.01
-for (condition in conditions){
-    coacc_list_filtered[[condition]] <- coacc_list[[condition]][coacc_list[[condition]]$correlation>background_cutoff]
-    coacc_list_filtered[[condition]] <- coacc_list_filtered[[condition]][(coacc_list_filtered[[condition]]$accessCellRatio1>0.01 & coacc_list_filtered[[condition]]$accessCellRatio2>0.01)]
-}
+########## Compute co-accessibility ##########
+### Split up ArchRProjects for samples
+proj_list <- sapply(samples, function(sample){proj_x <- saveArchRProject(ArchRProj = proj, outputDirectory = paste0("ArchhRProj_", sample), load = TRUE); 
+                                               subsetCells(ArchRProj = proj_x, cellNames = proj_x$cellNames[which(proj_x$Sample == sample)]) })
 
-### Visualize co-accessibility scores around ISGF3 binding site
-plotBrowserTrack(proj, groupBy = "Sample", region = gr.mid(bs)+500000, loops = coacc_list[1], normMethod = "nFrags")
+### Get co-accessibility for unaggregated cells
+proj_list <- lapply(proj_list, function(x){RWire10x::addCoAccessibility(x, reducedDims = "IterativeLSI", maxDist = 2e+06, 
+                                                                        cellAggregation = "duplicated", knnIteration = n, k=1) })
+coacc_list <- lapply(proj_list, function(x){RWire10x::getCoAccessibility(x, corCutOff = -1, resolution = 1, returnLoops = TRUE)[[1]] })
+
+### Get background co-accessibility
+background_list <- lapply(proj_list, function(x){RWire10x::getBackgroundCoAccessibility(x, reducedDims = "IterativeLSI", maxDist=2e+06, 
+                                                                                        cellAggregation = "duplicated", knnIteration = n, k=1) })
+
+### Determine 99th percentile maximum of cell- and feature-shuffled background co-accessibility
+background_cutoff <- lapply(background_list, function(x){max(quantile(x$featShuffle$correlation, seq(0.01,1,by=0.01), na.rm=T)[99],
+                                                             quantile(x$cellShuffle$correlation, seq(0.01,1,by=0.01), na.rm=T)[99]) }) %>% max(.) 
+
+### Filter links with correlation coefficient above background cutoff, p-value below 0.01, and overlap with STAT1/2 bound site
+coacc_list_filtered <- lapply(samples, function(sample){coacc_filtered <- coacc_list[[sample]][ coacc_list[[sample]]$correlation > background_cutoff ];
+                                                        coacc_filtered <- coacc_filtered[ coacc_filtered$Pval < 0.01 ];
+                                                        coacc_filtered <- coacc_filtered[ coacc_filtered$STAT ];
+                                                        return(coacc_filtered) })
+
+### Visualize co-accessibility scores around exemplary STAT1/2 bound site
+bs <- GRanges(seqnames="chr1", IRanges(start=35274688, end=35275064))
+plotBrowserTrack(proj, groupBy = "Sample", region = gr.mid(bs)+500000, loops = coacc_list_filtered, normMethod = "nFrags")
 
 
 ########## Print time and success status ##########
